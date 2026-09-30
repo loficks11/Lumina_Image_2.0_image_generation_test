@@ -14,7 +14,6 @@ NUM_INFERENCE_STEPS = 50
 CFG_TRUNC_RATIO = 0.25
 CFG_NORMALIZATION = True
 SEEDS = [0]
-DIRECT_GPU_MIN_VRAM_GIB = 24.0
 
 PROMPTS = [
     "A black colored banana.",
@@ -40,6 +39,11 @@ def parse_args():
         choices=range(1, len(PROMPTS) + 1),
         metavar=f"1-{len(PROMPTS)}",
         help="Generate only the first N prompts (use --limit 1 for a smoke test).",
+    )
+    parser.add_argument(
+        "--cpu-offload",
+        action="store_true",
+        help="Force CPU offload instead of loading the full pipeline onto the GPU.",
     )
     return parser.parse_args()
 
@@ -124,15 +128,15 @@ def main():
         if torch.cuda.is_bf16_supported(including_emulation=False)
         else torch.float16
     )
-    use_cpu_offload = vram_gib < DIRECT_GPU_MIN_VRAM_GIB
+    use_cpu_offload = args.cpu_offload
 
     print(f"Model: {MODEL_ID}")
     print(f"GPU: {device_properties.name} ({vram_gib:.1f} GiB VRAM)")
     print(f"dtype: {dtype}; CPU offload: {'enabled' if use_cpu_offload else 'disabled'}")
     if use_cpu_offload:
         print(
-            "VRAM is below the conservative 24 GiB direct-load threshold; "
-            "enabling model CPU offload."
+            "Enabling model CPU offload. This lowers VRAM use but increases "
+            "system RAM use."
         )
 
     total_started = time.perf_counter()
@@ -146,9 +150,9 @@ def main():
         torch.cuda.synchronize()
     except torch.cuda.OutOfMemoryError as error:
         raise SystemExit(
-            "CUDA ran out of VRAM while loading Lumina-Image-2.0. Model CPU offload "
-            "is enabled below 24 GiB, but this GPU still has too little available "
-            "memory. Use a GPU with more VRAM or close other GPU workloads."
+            "CUDA ran out of VRAM while loading Lumina-Image-2.0. Close other GPU "
+            "workloads. You can retry with --cpu-offload, but offloading increases "
+            "system RAM use and may exceed Colab's RAM limit."
         ) from error
     load_time = time.perf_counter() - load_started
     print(f"Model load time: {load_time:.1f} sec")
@@ -222,8 +226,9 @@ def main():
     except torch.cuda.OutOfMemoryError as error:
         raise SystemExit(
             "CUDA ran out of VRAM during image generation. Previously completed "
-            "images and metadata have been preserved. Use a GPU with more VRAM; "
-            "CPU offload is already enabled when VRAM is below 24 GiB."
+            "images and metadata have been preserved. Close other GPU workloads "
+            "or use a GPU with more VRAM. You can retry with --cpu-offload, but "
+            "offloading increases system RAM use and may exceed Colab's RAM limit."
         ) from error
 
     total_time = time.perf_counter() - total_started
