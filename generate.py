@@ -113,7 +113,7 @@ def main():
     vram_gib = device_properties.total_memory / (1024**3)
     dtype = (
         torch.bfloat16
-        if torch.cuda.is_bf16_supported()
+        if torch.cuda.is_bf16_supported(including_emulation=False)
         else torch.float16
     )
     use_cpu_offload = vram_gib < DIRECT_GPU_MIN_VRAM_GIB
@@ -130,7 +130,7 @@ def main():
     total_started = time.perf_counter()
     load_started = time.perf_counter()
     try:
-        pipe = Lumina2Pipeline.from_pretrained(MODEL_ID, torch_dtype=dtype)
+        pipe = Lumina2Pipeline.from_pretrained(MODEL_ID, dtype=dtype)
         if use_cpu_offload:
             pipe.enable_model_cpu_offload()
         else:
