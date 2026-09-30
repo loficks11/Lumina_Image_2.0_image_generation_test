@@ -86,6 +86,14 @@ def next_output_path(output_dir, prompt_id, seed):
     return output_path
 
 
+def log_denoising_progress(_pipeline, step_index, _timestep, callback_kwargs):
+    print(
+        f"Denoising step {step_index + 1}/{NUM_INFERENCE_STEPS} complete",
+        flush=True,
+    )
+    return callback_kwargs
+
+
 def main():
     args = parse_args()
     project_dir = Path(__file__).resolve().parent
@@ -154,6 +162,11 @@ def main():
         for prompt_index, prompt in enumerate(PROMPTS[:prompt_count], start=1):
             for seed in SEEDS:
                 output_path = next_output_path(output_dir, prompt_index, seed)
+                print(
+                    f"Starting prompt {prompt_index:02d}, seed {seed}; "
+                    "waiting for denoising steps...",
+                    flush=True,
+                )
                 torch.cuda.synchronize()
                 generation_started = time.perf_counter()
                 result = pipe(
@@ -165,6 +178,7 @@ def main():
                     cfg_trunc_ratio=CFG_TRUNC_RATIO,
                     cfg_normalization=CFG_NORMALIZATION,
                     generator=torch.Generator("cpu").manual_seed(seed),
+                    callback_on_step_end=log_denoising_progress,
                 )
                 torch.cuda.synchronize()
                 generation_time = time.perf_counter() - generation_started
